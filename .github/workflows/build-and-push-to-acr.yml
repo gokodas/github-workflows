@@ -1,0 +1,82 @@
+name: Build Docker Image and Push to ACR
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: 'Name of the job'
+        required: true
+        type: string
+      context:
+        description: 'Path to the Docker context'
+        required: false
+        default: '.'
+        type: string
+      dockerfile:
+        description: 'Path to the Dockerfile'
+        required: false
+        default: 'Dockerfile'
+        type: string
+      repository:
+        description: 'Docker image repository name'
+        required: true
+        type: string
+      registry:
+        description: 'Registry to push the Docker image to'
+        required: true
+        type: string
+      acr_subscription_id:
+        description: 'Azure ACR subscription ID'
+        required: true
+        type: string
+      build_args:
+        description: 'Build arguments'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      azure_identity_client_id:
+        description: 'Azure identity client ID'
+        required: true
+      azure_entra_id_tenant_id:
+        description: 'Azure Entra ID tenant ID'
+        required: true
+
+jobs:
+  build_image:
+    name: ${{ inputs.name || 'Build & Push Docker Image' }}
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: ${{ inputs.registry }}/${{ inputs.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: Azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.azure_identity_client_id }}
+          tenant-id: ${{ secrets.azure_entra_id_tenant_id }}
+          subscription-id: ${{ inputs.acr_subscription_id }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ inputs.registry }}
+          echo "Image to build is ${{ env.IMAGE_NAME }}"
+
+      - name: Build & Push to ACR
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          build-args: |
+            BUILD_NUMBER=${{ github.run_number }}
+            BUILD_ID=${{ github.run_id }}
+            ${{ inputs.build_args }}
+          cache-from: |
+            ${{ env.IMAGE_NAME }}:latest
+          cache-to: type=inline
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.run_number }}
