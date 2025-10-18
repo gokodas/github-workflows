@@ -25,7 +25,7 @@ on:
         description: 'Registry to push the Docker image to'
         required: true
         type: string
-      acr_subscription_id:
+      subscription_id:
         description: 'Azure ACR subscription ID'
         required: true
         type: string
@@ -59,7 +59,7 @@ jobs:
         with:
           client-id: ${{ secrets.azure_identity_client_id }}
           tenant-id: ${{ secrets.azure_entra_id_tenant_id }}
-          subscription-id: ${{ inputs.acr_subscription_id }}
+          subscription-id: ${{ inputs.subscription_id }}
 
       - name: Login to ACR
         run: |
