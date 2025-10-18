@@ -1,0 +1,118 @@
+name: Deploy Job to ACA
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: 'Name of the job to deploy'
+        required: true
+        type: string
+      repository:
+        description: 'Docker image repository name'
+        required: true
+        type: string
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: string
+      tag:
+        description: 'Tag for the Docker image'
+        required: true
+        type: string
+
+jobs:
+  deploy_aca:
+    name: Deploy ${{ inputs.name }} Job to ACA
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Azure Login
+        uses: Azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: UpdateJob Image and Start Execution
+        run: |
+          log_separator() {
+            echo "| ................................................................ |"
+          }
+
+          log_message() {
+            echo "| ..... | $1"
+          }
+
+          log_start_message() {
+            log_separator
+            log_message "$1"
+          }
+
+          log_end_message() {
+            log_message "$1"
+            log_separator
+          }
+
+          NEW_IMAGE_NAME="${{ vars.CONTAINER_REGISTRY }}/${{ inputs.repository }}:${{ inputs.tag }}"
+
+          # Update the image with the latest build ID
+          log_start_message "Updating job image to $NEW_IMAGE_NAME"
+
+          az containerapp job update \
+            --subscription "${{ vars.AZURE_SUBSCRIPTION_ID }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ inputs.name }}" \
+            --image $NEW_IMAGE_NAME \
+            --query "properties.template.containers[0].image"
+
+          log_start_message "Queuing a job execution"
+
+          JOB_NAME=$(
+            az containerapp job start \
+              --subscription "${{ vars.AZURE_SUBSCRIPTION_ID }}" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${{ inputs.name }}" \
+              --query "name" | tr -d '"'
+          )
+
+          log_start_message "Queued a job with name: $JOB_NAME"
+          log_start_message "Checking job execution status"
+
+          # Poll until job status is "Succeeded" or timeout is reached
+          START_TIME=$(date +%s)
+          TIMEOUT=120  # Timeout in seconds (2 minutes)
+
+          while true; do
+            sleep 3 # Wait before checking
+
+            STATUS=$(
+              az containerapp job execution show \
+                --subscription "${{ vars.AZURE_SUBSCRIPTION_ID }}" \
+                --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+                --name "${{ inputs.name }}" \
+                --job-execution-name $JOB_NAME \
+                --query "properties.status" | tr -d '"'
+            )
+
+            CURRENT_TIME=$(date +%s)
+            ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+            if [[ "$STATUS" == "Succeeded" ]]; then
+              log_end_message "Job completed successfully!"
+              exit 0
+            elif [[ "$STATUS" == "Failed" ]]; then
+              log_end_message "Job failed!"
+              exit 1
+            fi
+
+            # Check if timeout has been reached
+            CURRENT_TIME=$(date +%s)
+            ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+            if [[ "$ELAPSED_TIME" -ge "$TIMEOUT" ]]; then
+              log_end_message "Timeout reached! Job did not start within $TIMEOUT seconds"
+              exit 1
+            else
+              log_message "Job still $STATUS - Elapsed time: $ELAPSED_TIME seconds"
+            fi
+          done
