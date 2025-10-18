@@ -43,7 +43,7 @@ on:
         required: true
       sentry_auth_token:
         description: 'Sentry authentication token to use for sourcemap upload'
-        required: true
+        required: false
 
 jobs:
   build_image:
