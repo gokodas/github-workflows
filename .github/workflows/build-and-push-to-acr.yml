@@ -41,6 +41,9 @@ on:
       azure_entra_id_tenant_id:
         description: 'Azure Entra ID tenant ID'
         required: true
+      sentry_auth_token:
+        description: 'Sentry authentication token to use for sourcemap upload'
+        required: true
 
 jobs:
   build_image:
@@ -73,6 +76,7 @@ jobs:
           build-args: |
             BUILD_NUMBER=${{ github.run_number }}
             BUILD_ID=${{ github.run_id }}
+            SENTRY_AUTH_TOKEN=${{ secrets.sentry_auth_token }}
             ${{ inputs.build_args }}
           cache-from: |
             ${{ env.IMAGE_NAME }}:latest
