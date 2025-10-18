@@ -61,6 +61,10 @@ jobs:
           }
 
           log_start_message "Starting a new revision"
+          log_message "Subscription ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}"
+          log_message "Resource Group: ${{ vars.AZURE_RESOURCE_GROUP }}"
+          log_message "Name: ${{ inputs.name }}"
+          log_message "Image: ${{ inputs.image }}:${{ inputs.image_tag }}"
 
           az containerapp update \
             --subscription "${{ vars.AZURE_SUBSCRIPTION_ID }}" \
