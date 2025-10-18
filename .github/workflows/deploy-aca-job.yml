@@ -29,7 +29,7 @@ on:
 
 jobs:
   trigger_job_execution:
-    name: Trigger ${{ inputs.name || 'Job' }} Execution in ACA
+    name: 'ACA Job'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:

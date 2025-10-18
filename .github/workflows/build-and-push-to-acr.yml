@@ -3,10 +3,6 @@ name: Build Docker Image and Push to ACR
 on:
   workflow_call:
     inputs:
-      name:
-        description: 'Name of the job'
-        required: true
-        type: string
       context:
         description: 'Path to the Docker context'
         required: false
@@ -46,8 +42,8 @@ on:
         required: false
 
 jobs:
-  build_image:
-    name: ${{ inputs.name || 'Build & Push Docker Image' }}
+  docker_image:
+    name: 'Docker Image'
     runs-on: ubuntu-latest
     env:
       IMAGE_NAME: ${{ inputs.registry }}/${{ inputs.repository }}

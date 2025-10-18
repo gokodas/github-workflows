@@ -22,7 +22,6 @@ Builds a Docker image and pushes it to an Azure Container Registry (ACR).
 - Pushes built images to specified ACR registry
 
 **Required Inputs:**
-- `name`: Name of the job
 - `repository`: Docker image repository name
 - `registry`: Registry to push the Docker image to
 - `subscription_id`: Azure ACR subscription ID
