@@ -7,33 +7,40 @@ on:
         description: 'Name of the job to deploy'
         required: true
         type: string
-      repository:
-        description: 'Docker image repository name'
-        required: true
-        type: string
       environment:
         description: 'Environment to deploy to'
         required: true
         type: string
-      tag:
+      image:
+        description: 'Docker image to deploy'
+        required: true
+        type: string
+      image_tag:
         description: 'Tag for the Docker image'
         required: true
         type: string
+    secrets:
+      azure_identity_client_id:
+        description: 'Azure identity client ID'
+        required: true
+      azure_entra_id_tenant_id:
+        description: 'Azure Entra ID tenant ID'
+        required: true
 
 jobs:
-  deploy_aca:
-    name: Deploy ${{ inputs.name }} Job to ACA
+  trigger_job_execution:
+    name: Trigger ${{ inputs.name || 'Job' }} Execution in ACA
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
       - name: Azure Login
         uses: Azure/login@v2.3.0
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.azure_identity_client_id }}
+          tenant-id: ${{ secrets.azure_entra_id_tenant_id }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }} # This will have to be set for the provided environment
 
-      - name: UpdateJob Image and Start Execution
+      - name: Update Job Image and Start Execution
         run: |
           log_separator() {
             echo "| ................................................................ |"
@@ -53,16 +60,18 @@ jobs:
             log_separator
           }
 
-          NEW_IMAGE_NAME="${{ vars.CONTAINER_REGISTRY }}/${{ inputs.repository }}:${{ inputs.tag }}"
-
           # Update the image with the latest build ID
-          log_start_message "Updating job image to $NEW_IMAGE_NAME"
+          log_start_message "Updating job image"
+          log_message "Subscription ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}"
+          log_message "Resource Group: ${{ vars.AZURE_RESOURCE_GROUP }}"
+          log_message "Name: ${{ inputs.name }}"
+          log_message "Image: ${{ inputs.image }}:${{ inputs.image_tag }}"
 
           az containerapp job update \
             --subscription "${{ vars.AZURE_SUBSCRIPTION_ID }}" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --name "${{ inputs.name }}" \
-            --image $NEW_IMAGE_NAME \
+            --image "${{ inputs.image }}:${{ inputs.image_tag }}" \
             --query "properties.template.containers[0].image"
 
           log_start_message "Queuing a job execution"
