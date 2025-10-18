@@ -1,0 +1,110 @@
+name: Deploy Application to ACA
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: 'Name of the app to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: string
+      image:
+        description: 'Docker image to deploy'
+        required: true
+        type: string
+      image_tag:
+        description: 'Tag for the Docker image'
+        required: true
+        type: string
+    secrets:
+      azure_identity_client_id:
+        description: 'Azure identity client ID'
+        required: true
+      azure_entra_id_tenant_id:
+        description: 'Azure Entra ID tenant ID'
+        required: true
+
+jobs:
+  deploy_aca:
+    name: Deploy ${{ inputs.name || 'Application' }} to ACA
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Azure Login
+        uses: Azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.azure_identity_client_id }}
+          tenant-id: ${{ secrets.azure_entra_id_tenant_id }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }} # This will have to be set for the provided environment
+
+      - name: Start a New ACA Revision
+        run: |
+          log_separator() {
+            echo "| ................................................................ |"
+          }
+
+          log_message() {
+            echo "| ..... | $1"
+          }
+
+          log_start_message() {
+            log_separator
+            log_message "$1"
+          }
+
+          log_end_message() {
+            log_message "$1"
+            log_separator
+          }
+
+          log_start_message "Starting a new revision"
+
+          az containerapp update \
+            --subscription "${{ vars.AZURE_SUBSCRIPTION_ID }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ inputs.name }}" \
+            --image "${{ inputs.image }}:${{ inputs.image_tag }}" \
+            --revision-suffix "v${{ inputs.image_tag }}";
+
+          log_start_message "Checking revision status"
+
+          # Poll until revision status is ready or timeout is reached
+          START_TIME=$(date +%s)
+          TIMEOUT=120  # Timeout in seconds (2 minutes)
+
+          while true; do
+            sleep 3 # Wait before checking
+
+            STATUS=$(
+              az containerapp revision show \
+                --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+                --revision "${{ inputs.name }}--v${{ inputs.image_tag }}" \
+                --query "properties.runningState" | tr -d '"'
+            )
+
+            CURRENT_TIME=$(date +%s)
+            ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+            # Successful status can be Running/RunningAtMaxScale
+            if [[ "$STATUS" == Running* ]]; then
+              log_end_message "Revision started successfully!"
+              exit 0
+            elif [[ "$STATUS" == "Failed" ]]; then
+              log_end_message "Revision startup failed!"
+              exit 1
+            fi
+
+            # Check if timeout has been reached
+            CURRENT_TIME=$(date +%s)
+            ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+            if [[ "$ELAPSED_TIME" -ge "$TIMEOUT" ]]; then
+              log_end_message "Timeout reached! Revision did not start within $TIMEOUT seconds"
+              exit 1
+            else
+              log_message "Revision still $STATUS - Elapsed time: $ELAPSED_TIME seconds"
+            fi
+          done
